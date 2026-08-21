@@ -1,4 +1,4 @@
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import helmet from "@fastify/helmet";
 import rawBody from "fastify-raw-body";
 import type { LeadRepository } from "./repositories/lead-repository.js";
@@ -32,11 +32,12 @@ export async function buildApp(repository: LeadRepository, config: AppConfig, ou
   await app.register(helmet, {
     contentSecurityPolicy: {
       directives: {
-        // Панель /dashboard работает по обычному HTTP (127.0.0.1), и без явного
-        // отключения этой директивы браузер молча апгрейдит запрос к /dashboard.js
-        // на https:// — TLS-слушателя на этом порту нет, скрипт не загружается,
-        // и страница выглядит так, будто JS вообще не запускается.
+        // Панель /dashboard работает по обычному HTTP (127.0.0.1). Без отключения
+        // этой директивы браузер апгрейдит скрипты на https://, а слушателя TLS нет.
         "upgrade-insecure-requests": null,
+        // Скрипт панели встроен в HTML, чтобы Android не терял /dashboard.js
+        // из‑за кэша или принудительного HTTPS.
+        "script-src": ["'self'", "'unsafe-inline'"],
       },
     },
   });
@@ -68,10 +69,14 @@ export async function buildApp(repository: LeadRepository, config: AppConfig, ou
     return Promise.all(candidates.map((candidate) => repository.upsert(candidate)));
   }
 
+  function sendDashboardAsset(reply: FastifyReply, type: string, body: string) {
+    return reply.header("cache-control", "no-store").type(`${type}; charset=utf-8`).send(body);
+  }
+
   app.get("/health", async () => ({ status: "ok", version: "0.6.1", storage: process.env.STORAGE_DRIVER ?? "postgres" }));
-  app.get("/dashboard", async (_request, reply) => reply.type("text/html; charset=utf-8").send(dashboardHtml));
-  app.get("/dashboard.css", async (_request, reply) => reply.type("text/css; charset=utf-8").send(dashboardCss));
-  app.get("/dashboard.js", async (_request, reply) => reply.type("application/javascript; charset=utf-8").send(dashboardJs));
+  app.get("/dashboard", async (_request, reply) => sendDashboardAsset(reply, "text/html", dashboardHtml));
+  app.get("/dashboard.css", async (_request, reply) => sendDashboardAsset(reply, "text/css", dashboardCss));
+  app.get("/dashboard.js", async (_request, reply) => sendDashboardAsset(reply, "application/javascript", dashboardJs));
 
   app.get("/api/leads", async (request, reply) => {
     if (!isAdmin(request.headers["x-api-key"])) return reply.code(401).send({ error: "unauthorized" });

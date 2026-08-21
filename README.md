@@ -1,5 +1,7 @@
 # Social Contact Collector
 
+Как включить программу с нуля (Termux и Windows) — в `START_RU.md`.
+
 Полная русскоязычная инструкция по установке, настройке и рассылкам находится в `USER_GUIDE_RU.md`.
 
 Инструкция по запуску на Android через Termux и редактированию в Acode находится в `TERMUX_ACODE_GUIDE_RU.md`.

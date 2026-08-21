@@ -1,28 +1,351 @@
+export const dashboardAssetVersion = "5";
+
+// String.raw keeps regex escapes intact. A normal template literal turns
+// split(/\n---\n/) into a regex with real newlines, which browsers reject
+// before any click handler runs.
+export const dashboardJs = String.raw`"use strict";
+const $ = (id) => document.getElementById(id);
+const key = () => localStorage.getItem("collectorApiKey") || "";
+const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;"
+}[c]));
+let leads = [];
+let commentHistory = [];
+
+async function api(path) {
+  const r = await fetch(path, { headers: { "x-api-key": key() } });
+  if (r.status === 401) throw new Error("Укажите правильный API-ключ");
+  if (!r.ok) throw new Error("Ошибка API: " + r.status);
+  return r.json();
+}
+
+async function send(path, data) {
+  const r = await fetch(path, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": key() },
+    body: JSON.stringify(data)
+  });
+  const body = await r.json();
+  if (!r.ok) throw new Error(body.error || "Ошибка API: " + r.status);
+  return body;
+}
+
+function contacts(l) {
+  return [...l.contacts.phones, ...l.contacts.emails, ...l.contacts.telegram].join(" · ") || "—";
+}
+
+function render() {
+  const q = $("search").value.toLowerCase();
+  const p = $("platform").value;
+  const data = leads.filter((l) => (!p || l.platform === p) && JSON.stringify(l).toLowerCase().includes(q));
+  $("rows").innerHTML = data.map((l) =>
+    "<tr><td><span class=\"badge\">" + esc(l.platform) + "</span></td><td>" +
+    esc(l.displayName || l.username || l.platformUserId) + "</td><td>" +
+    esc(contacts(l)) + "</td><td>" + esc(l.sourceType || "—") + "</td><td class=\"score\">" +
+    esc(l.score) + "</td><td class=\"muted\">" +
+    esc(new Date(l.collectedAt).toLocaleString("ru-RU")) + "</td></tr>"
+  ).join("") || "<tr><td colspan=\"6\" class=\"muted\">Лиды не найдены</td></tr>";
+}
+
+function renderComments() {
+  const labels = { draft: "Черновик", published: "Опубликован", failed: "Ошибка" };
+  $("commentRows").innerHTML = commentHistory.map((c) =>
+    "<div class=\"comment-item\"><div class=\"comment-head\"><span class=\"badge\">" +
+    esc(labels[c.status] || c.status) + "</span><span class=\"muted\">" +
+    esc(c.accountLabel) + " · " + esc(new Date(c.createdAt).toLocaleString("ru-RU")) +
+    "</span></div><a href=\"" + esc(c.targetUrl) + "\" target=\"_blank\" rel=\"noopener\">" +
+    esc(c.targetUrl) + "</a><div class=\"comment-text\">" + esc(c.text) + "</div>" +
+    (c.lastError ? "<div class=\"muted\">" + esc(c.lastError) + "</div>" : "") +
+    (c.status === "draft"
+      ? "<button class=\"publish-comment\" data-id=\"" + esc(c.id) + "\" type=\"button\">Подтвердить и опубликовать</button>"
+      : c.providerUrl
+        ? "<a href=\"" + esc(c.providerUrl) + "\" target=\"_blank\" rel=\"noopener\">Открыть комментарий</a>"
+        : "") +
+    "</div>"
+  ).join("") || "<p class=\"muted\">Комментариев пока нет</p>";
+  document.querySelectorAll(".publish-comment").forEach((button) => {
+    button.onclick = () => publishComment(button.dataset.id);
+  });
+}
+
+async function loadComments() {
+  const [accounts, history] = await Promise.all([api("/api/comments/accounts"), api("/api/comments")]);
+  const current = $("commentAccount").value;
+  $("commentAccount").innerHTML = accounts.data.length
+    ? accounts.data.map((a) => "<option value=\"" + esc(a.id) + "\">" + esc(a.label) + " · лимит " + esc(a.dailyLimit) + "/день</option>").join("")
+    : "<option value=\"\">Нет настроенных аккаунтов</option>";
+  $("commentAccount").value = current && accounts.data.some((a) => a.id === current)
+    ? current
+    : (accounts.data[0] ? accounts.data[0].id : "");
+  commentHistory = history.data;
+  renderComments();
+}
+
+async function publishComment(id) {
+  if (!confirm("Опубликовать этот комментарий от выбранного аккаунта VK?")) return;
+  try {
+    $("status").textContent = "Публикация комментария…";
+    await send("/api/comments/" + id + "/publish", { confirmation: "PUBLISH" });
+    await loadComments();
+    $("status").textContent = "Комментарий опубликован";
+  } catch (e) {
+    await loadComments().catch(() => {});
+    $("status").textContent = e.message;
+  }
+}
+
+async function load() {
+  $("keyInput").value = key();
+  if (!key()) {
+    $("status").textContent = "Вставьте ключ в окно справа и нажмите API-ключ";
+    $("keyInput").focus();
+    return;
+  }
+  try {
+    $("status").textContent = "Загрузка…";
+    const [list, stats, templates] = await Promise.all([
+      api("/api/leads?limit=200"),
+      api("/api/stats"),
+      api("/api/outreach/templates")
+    ]);
+    leads = list.data;
+    $("total").textContent = stats.total;
+    $("contacted").textContent = stats.withContacts;
+    $("score").textContent = Math.round(stats.averageScore);
+    $("platforms").textContent = stats.byPlatform.length;
+    const current = $("platform").value;
+    $("platform").innerHTML = "<option value=\"\">Все платформы</option>" +
+      stats.byPlatform.map((x) => "<option value=\"" + esc(x.platform) + "\">" + esc(x.platform) + " (" + esc(x.count) + ")</option>").join("");
+    $("platform").value = current;
+    $("campaignTemplate").innerHTML = "<option value=\"\">Выберите шаблон</option>" +
+      templates.data.map((t) => "<option value=\"" + esc(t.id) + "\">" + esc(t.name) + " (" + esc(t.variants.length) + " вар.)</option>").join("");
+    render();
+    await loadComments();
+    $("status").textContent = "Обновлено: " + new Date().toLocaleTimeString("ru-RU");
+  } catch (e) {
+    $("status").textContent = e.message;
+    $("keyInput").focus();
+  }
+}
+
+$("keyForm").onsubmit = (e) => {
+  e.preventDefault();
+  localStorage.setItem("collectorApiKey", $("keyInput").value.trim());
+  load();
+};
+$("reload").onclick = load;
+$("search").oninput = render;
+$("platform").onchange = render;
+$("commentText").oninput = () => {
+  $("commentCounter").textContent = $("commentText").value.length + " / 4096";
+};
+$("createDraft").onclick = async () => {
+  try {
+    const accountId = $("commentAccount").value;
+    if (!accountId) throw new Error("Сначала настройте аккаунт VK в .env");
+    await send("/api/comments/drafts", {
+      accountId,
+      targetUrl: $("commentUrl").value.trim(),
+      text: $("commentText").value
+    });
+    $("commentText").value = "";
+    $("commentCounter").textContent = "0 / 4096";
+    await loadComments();
+    $("status").textContent = "Черновик создан. Проверьте его и нажмите публикацию.";
+  } catch (e) {
+    $("status").textContent = e.message;
+  }
+};
+$("createTemplate").onclick = async () => {
+  try {
+    const variants = $("variants").value.split("---").map((x) => x.trim()).filter(Boolean);
+    await send("/api/outreach/templates", {
+      name: $("templateName").value,
+      platform: $("templatePlatform").value,
+      variants
+    });
+    $("status").textContent = "Шаблон сохранён";
+    await load();
+  } catch (e) {
+    $("status").textContent = e.message;
+  }
+};
+$("createCampaign").onclick = async () => {
+  try {
+    const platforms = $("campaignPlatforms").value.split(",").map((x) => x.trim()).filter(Boolean);
+    const campaign = await send("/api/outreach/campaigns", {
+      name: $("campaignName").value,
+      templateId: $("campaignTemplate").value,
+      platforms,
+      minimumScore: Number($("minimumScore").value),
+      scheduledAt: $("scheduledAt").value || new Date().toISOString()
+    });
+    const result = await send("/api/outreach/campaigns/" + campaign.id + "/launch", {});
+    $("status").textContent = "Кампания запущена. В очереди: " + result.queued + ", пропущено: " + result.skipped;
+  } catch (e) {
+    $("status").textContent = e.message;
+  }
+};
+$("csv").onclick = async () => {
+  const r = await fetch("/api/leads.csv", { headers: { "x-api-key": key() } });
+  if (!r.ok) {
+    $("status").textContent = "Не удалось выгрузить CSV";
+    return;
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(await r.blob());
+  a.download = "leads.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+load();
+`;
+
+export const dashboardCss = `:root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui;background:#081018;color:#eaf1f7}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(circle at 20% 0,#14364a 0,transparent 35%),#081018}
+main{max-width:1280px;margin:auto;padding:40px 24px}
+header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:28px}
+.eyebrow{color:#52d6b5;letter-spacing:.14em;font-size:12px}
+h1{font-size:36px;margin:6px 0}
+h2{margin-top:0}
+.key-window{display:flex;gap:10px;align-items:stretch;flex:1;min-width:min(100%,280px)}
+.key-box{flex:1;min-width:0;background:#0d1a24;border:1px solid #203442;border-radius:14px;padding:10px 12px;display:grid;gap:6px}
+.key-box p{margin:0;color:#8ea4b3;font-size:12px}
+.key-box input{width:100%;flex-basis:auto}
+.key-window > button{align-self:stretch;font-weight:700;border-color:#52d6b5;white-space:nowrap;min-width:120px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.stats article,.toolbar,.table-wrap,.outreach article,.comments article{background:#0d1a24;border:1px solid #203442;border-radius:14px}
+.stats article{padding:20px}
+.stats span{display:block;color:#8ea4b3;font-size:13px}
+.stats strong{display:block;font-size:30px;margin-top:8px}
+.outreach,.comments{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+.outreach article,.comments article{padding:18px;display:grid;gap:10px}
+.toolbar,.actions{display:flex;gap:10px;padding:14px;margin-bottom:20px}
+.actions{padding:0;margin:0;align-items:center;justify-content:space-between}
+input,select,textarea,button{border:1px solid #294250;background:#10232f;color:#edf7fa;border-radius:9px;padding:11px 13px}
+textarea{min-height:120px;resize:vertical}
+input{flex:1}
+button{cursor:pointer}
+button:hover{border-color:#52d6b5}
+.danger{border-color:#8d4d51;background:#3b1e24}
+.comment-list{max-height:420px;overflow:auto;display:grid;gap:9px}
+.comment-item{border:1px solid #203442;border-radius:10px;padding:12px;display:grid;gap:7px}
+.comment-head{display:flex;justify-content:space-between;gap:8px}
+.comment-text{white-space:pre-wrap;overflow-wrap:anywhere}
+.table-wrap{overflow:auto}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:14px;border-bottom:1px solid #1d303d;font-size:14px}
+th{color:#8ea4b3}
+.badge{display:inline-block;padding:4px 8px;border-radius:99px;background:#183847;color:#7de2ca}
+.score{font-weight:700;color:#52d6b5}
+.muted,.status{color:#8ea4b3}
+.status{min-height:24px}
+code{font-size:12px;word-break:break-all}
+@media(max-width:800px){
+.stats{grid-template-columns:repeat(2,1fr)}
+.outreach,.comments{grid-template-columns:1fr}
+.toolbar{flex-wrap:wrap}
+input{flex-basis:100%}
+.key-window{flex-basis:100%;min-width:0}
+.key-box input{flex-basis:auto}
+main{padding:24px 12px}
+h1{font-size:28px}
+}`;
+
 export const dashboardHtml = `<!doctype html>
-<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Social Contact Collector</title><link rel="stylesheet" href="/dashboard.css"></head>
-<body><pre id="debugLog" style="position:relative;z-index:1000;margin:0;padding:10px;background:#000;color:#0f0;font:12px/1.4 monospace;white-space:pre-wrap;word-break:break-all;max-height:220px;overflow:auto;border-bottom:3px solid red">ОЖИДАНИЕ ЗАПУСКА JS…</pre><main><header><div><p class="eyebrow">SOCIAL CONTACT COLLECTOR</p><h1>Панель лидов</h1></div><button id="settings">API-ключ</button></header>
-<div id="keyModal" class="modal hidden"><div class="modal-box"><p>Введите ADMIN_API_KEY</p><input id="keyInput" type="text" autocomplete="off"><div class="actions"><button id="keySave">Сохранить</button><button id="keyCancel">Отмена</button></div></div></div>
-<section id="stats" class="stats"><article><span>Всего</span><strong id="total">—</strong></article><article><span>С контактами</span><strong id="contacted">—</strong></article><article><span>Средний score</span><strong id="score">—</strong></article><article><span>Платформ</span><strong id="platforms">—</strong></article></section>
-<section class="outreach"><article><h2>Новый шаблон</h2><input id="templateName" placeholder="Название шаблона"><select id="templatePlatform"><option value="all">Все платформы</option><option>telegram</option><option>vk</option><option>instagram</option><option>facebook</option><option>x</option><option>linkedin</option><option>dzen</option><option>pinterest</option><option>reddit</option><option>quora</option></select><textarea id="variants" placeholder="Вариант 1&#10;---&#10;Вариант 2&#10;&#10;Переменные: {{firstName}}, {{displayName}}, {{username}}, {{platform}}"></textarea><button id="createTemplate">Сохранить шаблон</button></article>
-<article><h2>Новая кампания</h2><input id="campaignName" placeholder="Название кампании"><select id="campaignTemplate"><option value="">Выберите шаблон</option></select><input id="campaignPlatforms" placeholder="Платформы через запятую: telegram,vk"><input id="minimumScore" type="number" min="0" max="100" value="0" placeholder="Минимальный score"><input id="scheduledAt" type="datetime-local"><button id="createCampaign">Создать и запустить</button><p class="muted">Отправка только по подтверждённым контактам или существующим диалогам.</p></article></section>
-<section class="comments"><article><div><p class="eyebrow">КОММЕНТАРИИ</p><h2>Новый комментарий VK</h2></div><select id="commentAccount"><option value="">Нет настроенных аккаунтов</option></select><input id="commentUrl" placeholder="https://vk.com/wall-123_456"><textarea id="commentText" maxlength="4096" placeholder="Текст комментария"></textarea><div class="actions"><button id="createDraft">Создать черновик</button><span id="commentCounter" class="muted">0 / 4096</span></div><p class="muted">Сначала создаётся черновик. Публикация выполняется только отдельной кнопкой подтверждения.</p></article>
-<article><h2>Журнал комментариев</h2><div class="comment-list" id="commentRows"><p class="muted">Комментариев пока нет</p></div></article></section>
-<section class="toolbar"><input id="search" placeholder="Поиск по имени, контакту или платформе"><select id="platform"><option value="">Все платформы</option></select><button id="reload">Обновить</button><button id="csv">Скачать CSV</button></section>
-<section class="table-wrap"><table><thead><tr><th>Платформа</th><th>Лид</th><th>Контакты</th><th>Источник</th><th>Score</th><th>Дата</th></tr></thead><tbody id="rows"></tbody></table></section>
-<p id="status" class="status"></p></main><script src="/dashboard.js" defer></script></body></html>`;
-
-export const dashboardCss = `:root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui;background:#081018;color:#eaf1f7}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 20% 0,#14364a 0,transparent 35%),#081018}main{max-width:1280px;margin:auto;padding:40px 24px}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px}.eyebrow{color:#52d6b5;letter-spacing:.14em;font-size:12px}h1{font-size:36px;margin:6px 0}h2{margin-top:0}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}.stats article,.toolbar,.table-wrap,.outreach article,.comments article{background:#0d1a24;border:1px solid #203442;border-radius:14px}.stats article{padding:20px}.stats span{display:block;color:#8ea4b3;font-size:13px}.stats strong{display:block;font-size:30px;margin-top:8px}.outreach,.comments{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}.outreach article,.comments article{padding:18px;display:grid;gap:10px}.toolbar,.actions{display:flex;gap:10px;padding:14px;margin-bottom:20px}.actions{padding:0;margin:0;align-items:center;justify-content:space-between}input,select,textarea,button{border:1px solid #294250;background:#10232f;color:#edf7fa;border-radius:9px;padding:11px 13px}textarea{min-height:120px;resize:vertical}input{flex:1}button{cursor:pointer}button:hover{border-color:#52d6b5}.danger{border-color:#8d4d51;background:#3b1e24}.comment-list{max-height:420px;overflow:auto;display:grid;gap:9px}.comment-item{border:1px solid #203442;border-radius:10px;padding:12px;display:grid;gap:7px}.comment-head{display:flex;justify-content:space-between;gap:8px}.comment-text{white-space:pre-wrap;overflow-wrap:anywhere}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:14px;border-bottom:1px solid #1d303d;font-size:14px}th{color:#8ea4b3}.badge{display:inline-block;padding:4px 8px;border-radius:99px;background:#183847;color:#7de2ca}.score{font-weight:700;color:#52d6b5}.muted,.status{color:#8ea4b3}.status{min-height:24px}.modal{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(4,10,16,.85);display:flex;align-items:center;justify-content:center;padding:20px;z-index:999}.modal.hidden{display:none!important}.modal-box{background:#0d1a24;border:1px solid #203442;border-radius:14px;padding:20px;display:grid;gap:12px;width:100%;max-width:360px}.modal-box .actions{padding:0;margin:0}
-@media(max-width:800px){.stats{grid-template-columns:repeat(2,1fr)}.outreach,.comments{grid-template-columns:1fr}.toolbar{flex-wrap:wrap}input{flex-basis:100%}main{padding:24px 12px}}`;
-
-export const dashboardJs = `(function(){const el=document.getElementById('debugLog');el.textContent='';function log(m){try{el.textContent+='['+new Date().toLocaleTimeString('ru-RU')+'] '+m+'\\n';el.scrollTop=el.scrollHeight;console.log(m)}catch(e){}}window.log=log;window.onerror=function(msg,src,line,col,err){log('JS ERROR: '+msg+' @'+line+':'+col+(err&&err.stack?(' '+err.stack):''))};window.addEventListener('unhandledrejection',function(e){log('PROMISE REJECTION: '+(e.reason&&e.reason.message?e.reason.message:e.reason))});log('script started, UA='+navigator.userAgent);['settings','keyModal','keyInput','keySave','keyCancel','reload','search','platform','rows','status','csv'].forEach(function(id){log((document.getElementById(id)?'OK':'MISSING')+': #'+id)})})();
-let leads=[],commentHistory=[];const $=id=>document.getElementById(id);const key=()=>localStorage.getItem('collectorApiKey')||'';const esc=v=>String(v===null||v===undefined?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function api(path){const r=await fetch(path,{headers:{'x-api-key':key()}});if(r.status===401)throw new Error('Укажите правильный API-ключ');if(!r.ok)throw new Error('Ошибка API: '+r.status);return r.json()}
-async function send(path,data){const r=await fetch(path,{method:'POST',headers:{'content-type':'application/json','x-api-key':key()},body:JSON.stringify(data)});const body=await r.json();if(!r.ok)throw new Error(body.error||'Ошибка API: '+r.status);return body}
-function contacts(l){return [...l.contacts.phones,...l.contacts.emails,...l.contacts.telegram].join(' · ')||'—'}
-function render(){const q=$('search').value.toLowerCase(),p=$('platform').value;const data=leads.filter(l=>(!p||l.platform===p)&&JSON.stringify(l).toLowerCase().includes(q));$('rows').innerHTML=data.map(l=>'<tr><td><span class="badge">'+esc(l.platform)+'</span></td><td>'+esc(l.displayName||l.username||l.platformUserId)+'</td><td>'+esc(contacts(l))+'</td><td>'+esc(l.sourceType||'—')+'</td><td class="score">'+esc(l.score)+'</td><td class="muted">'+esc(new Date(l.collectedAt).toLocaleString('ru-RU'))+'</td></tr>').join('')||'<tr><td colspan="6" class="muted">Лиды не найдены</td></tr>'}
-function renderComments(){const labels={draft:'Черновик',published:'Опубликован',failed:'Ошибка'};$('commentRows').innerHTML=commentHistory.map(c=>'<div class="comment-item"><div class="comment-head"><span class="badge">'+esc(labels[c.status]||c.status)+'</span><span class="muted">'+esc(c.accountLabel)+' · '+esc(new Date(c.createdAt).toLocaleString('ru-RU'))+'</span></div><a href="'+esc(c.targetUrl)+'" target="_blank" rel="noopener">'+esc(c.targetUrl)+'</a><div class="comment-text">'+esc(c.text)+'</div>'+(c.lastError?'<div class="muted">'+esc(c.lastError)+'</div>':'')+(c.status==='draft'?'<button class="publish-comment" data-id="'+esc(c.id)+'">Подтвердить и опубликовать</button>':c.providerUrl?'<a href="'+esc(c.providerUrl)+'" target="_blank" rel="noopener">Открыть комментарий</a>':'')+'</div>').join('')||'<p class="muted">Комментариев пока нет</p>';document.querySelectorAll('.publish-comment').forEach(button=>button.onclick=()=>publishComment(button.dataset.id))}
-async function loadComments(){const [accounts,history]=await Promise.all([api('/api/comments/accounts'),api('/api/comments')]);const current=$('commentAccount').value;$('commentAccount').innerHTML=accounts.data.length?accounts.data.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.label)+' · лимит '+esc(a.dailyLimit)+'/день</option>').join(''):'<option value="">Нет настроенных аккаунтов</option>';$('commentAccount').value=current&&accounts.data.some(a=>a.id===current)?current:(accounts.data[0]?accounts.data[0].id:'');commentHistory=history.data;renderComments()}
-async function publishComment(id){if(!confirm('Опубликовать этот комментарий от выбранного аккаунта VK?'))return;try{$('status').textContent='Публикация комментария…';await send('/api/comments/'+id+'/publish',{confirmation:'PUBLISH'});await loadComments();$('status').textContent='Комментарий опубликован'}catch(e){await loadComments().catch(()=>{});$('status').textContent=e.message}}
-async function load(){try{$('status').textContent='Загрузка…';const [list,stats,templates]=await Promise.all([api('/api/leads?limit=200'),api('/api/stats'),api('/api/outreach/templates')]);leads=list.data;$('total').textContent=stats.total;$('contacted').textContent=stats.withContacts;$('score').textContent=Math.round(stats.averageScore);$('platforms').textContent=stats.byPlatform.length;const current=$('platform').value;$('platform').innerHTML='<option value="">Все платформы</option>'+stats.byPlatform.map(x=>'<option value="'+esc(x.platform)+'">'+esc(x.platform)+' ('+esc(x.count)+')</option>').join('');$('platform').value=current;$('campaignTemplate').innerHTML='<option value="">Выберите шаблон</option>'+templates.data.map(t=>'<option value="'+esc(t.id)+'">'+esc(t.name)+' ('+esc(t.variants.length)+' вар.)</option>').join('');render();await loadComments();$('status').textContent='Обновлено: '+new Date().toLocaleTimeString('ru-RU')}catch(e){$('status').textContent=e.message;window.log&&window.log('load() error: '+e.message)}}
-$('settings').onclick=()=>{window.log&&window.log('settings clicked');$('keyInput').value=key();$('keyModal').classList.remove('hidden');window.log&&window.log('modal classList now: '+$('keyModal').className);$('keyInput').focus()};$('keyCancel').onclick=()=>$('keyModal').classList.add('hidden');$('keySave').onclick=()=>{localStorage.setItem('collectorApiKey',$('keyInput').value.trim());$('keyModal').classList.add('hidden');load()};$('keyInput').onkeydown=e=>{if(e.key==='Enter')$('keySave').click();if(e.key==='Escape')$('keyCancel').click()};$('reload').onclick=load;$('search').oninput=render;$('platform').onchange=render;$('commentText').oninput=()=>{$('commentCounter').textContent=$('commentText').value.length+' / 4096'};$('createDraft').onclick=async()=>{try{const accountId=$('commentAccount').value;if(!accountId)throw new Error('Сначала настройте аккаунт VK в .env');await send('/api/comments/drafts',{accountId,targetUrl:$('commentUrl').value.trim(),text:$('commentText').value});$('commentText').value='';$('commentCounter').textContent='0 / 4096';await loadComments();$('status').textContent='Черновик создан. Проверьте его и нажмите публикацию.'}catch(e){$('status').textContent=e.message}};$('createTemplate').onclick=async()=>{try{const variants=$('variants').value.split(/\n---\n/).map(x=>x.trim()).filter(Boolean);await send('/api/outreach/templates',{name:$('templateName').value,platform:$('templatePlatform').value,variants});$('status').textContent='Шаблон сохранён';await load()}catch(e){$('status').textContent=e.message}};$('createCampaign').onclick=async()=>{try{const platforms=$('campaignPlatforms').value.split(',').map(x=>x.trim()).filter(Boolean);const campaign=await send('/api/outreach/campaigns',{name:$('campaignName').value,templateId:$('campaignTemplate').value,platforms,minimumScore:Number($('minimumScore').value),scheduledAt:$('scheduledAt').value||new Date().toISOString()});const result=await send('/api/outreach/campaigns/'+campaign.id+'/launch',{});$('status').textContent='Кампания запущена. В очереди: '+result.queued+', пропущено: '+result.skipped}catch(e){$('status').textContent=e.message}};$('csv').onclick=async()=>{const r=await fetch('/api/leads.csv',{headers:{'x-api-key':key()}});if(!r.ok)return $('status').textContent='Не удалось выгрузить CSV';const a=document.createElement('a');a.href=URL.createObjectURL(await r.blob());a.download='leads.csv';a.click();URL.revokeObjectURL(a.href)};load();`;
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-store">
+<title>Social Contact Collector</title>
+<link rel="stylesheet" href="/dashboard.css?v=${dashboardAssetVersion}">
+</head>
+<body>
+<main>
+<header>
+<div>
+<p class="eyebrow">SOCIAL CONTACT COLLECTOR</p>
+<h1>Панель лидов</h1>
+</div>
+<form id="keyForm" class="key-window">
+<div class="key-box">
+<p>Окно для ключа</p>
+<input id="keyInput" type="text" autocomplete="off" placeholder="Вставьте ADMIN_API_KEY">
+</div>
+<button id="settings" type="submit">API-ключ</button>
+</form>
+</header>
+<section id="stats" class="stats">
+<article><span>Всего</span><strong id="total">—</strong></article>
+<article><span>С контактами</span><strong id="contacted">—</strong></article>
+<article><span>Средний score</span><strong id="score">—</strong></article>
+<article><span>Платформ</span><strong id="platforms">—</strong></article>
+</section>
+<section class="outreach">
+<article>
+<h2>Новый шаблон</h2>
+<input id="templateName" placeholder="Название шаблона">
+<select id="templatePlatform">
+<option value="all">Все платформы</option>
+<option>telegram</option><option>vk</option><option>instagram</option><option>facebook</option>
+<option>x</option><option>linkedin</option><option>dzen</option><option>pinterest</option>
+<option>reddit</option><option>quora</option>
+</select>
+<textarea id="variants" placeholder="Вариант 1&#10;---&#10;Вариант 2&#10;&#10;Переменные: {{firstName}}, {{displayName}}, {{username}}, {{platform}}"></textarea>
+<button id="createTemplate" type="button">Сохранить шаблон</button>
+</article>
+<article>
+<h2>Новая кампания</h2>
+<input id="campaignName" placeholder="Название кампании">
+<select id="campaignTemplate"><option value="">Выберите шаблон</option></select>
+<input id="campaignPlatforms" placeholder="Платформы через запятую: telegram,vk">
+<input id="minimumScore" type="number" min="0" max="100" value="0" placeholder="Минимальный score">
+<input id="scheduledAt" type="datetime-local">
+<button id="createCampaign" type="button">Создать и запустить</button>
+<p class="muted">Отправка только по подтверждённым контактам или существующим диалогам.</p>
+</article>
+</section>
+<section class="comments">
+<article>
+<div>
+<p class="eyebrow">КОММЕНТАРИИ</p>
+<h2>Новый комментарий VK</h2>
+</div>
+<select id="commentAccount"><option value="">Нет настроенных аккаунтов</option></select>
+<input id="commentUrl" placeholder="https://vk.com/wall-123_456">
+<textarea id="commentText" maxlength="4096" placeholder="Текст комментария"></textarea>
+<div class="actions">
+<button id="createDraft" type="button">Создать черновик</button>
+<span id="commentCounter" class="muted">0 / 4096</span>
+</div>
+<p class="muted">Сначала создаётся черновик. Публикация выполняется только отдельной кнопкой подтверждения.</p>
+</article>
+<article>
+<h2>Журнал комментариев</h2>
+<div class="comment-list" id="commentRows"><p class="muted">Комментариев пока нет</p></div>
+</article>
+</section>
+<section class="toolbar">
+<input id="search" placeholder="Поиск по имени, контакту или платформе">
+<select id="platform"><option value="">Все платформы</option></select>
+<button id="reload" type="button">Обновить</button>
+<button id="csv" type="button">Скачать CSV</button>
+</section>
+<section class="table-wrap">
+<table>
+<thead><tr><th>Платформа</th><th>Лид</th><th>Контакты</th><th>Источник</th><th>Score</th><th>Дата</th></tr></thead>
+<tbody id="rows"></tbody>
+</table>
+</section>
+<p id="status" class="status">Вставьте ключ в окно справа и нажмите API-ключ</p>
+</main>
+<noscript><p class="status">Для панели нужен JavaScript.</p></noscript>
+<script>${dashboardJs}</script>
+</body>
+</html>`;
