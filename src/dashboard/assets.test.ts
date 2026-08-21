@@ -9,4 +9,18 @@ describe("dashboard assets", () => {
     expect(dashboardJs).toContain('/api/leads.csv');
     expect(dashboardCss).toContain('@media');
   });
+
+  it("emits syntactically valid dashboard.js (template-literal escapes must survive)", () => {
+    expect(() => new Function(dashboardJs)).not.toThrow();
+    expect(dashboardJs).toContain("split(/\\n---\\n/)");
+    expect(dashboardJs).not.toMatch(/split\(\/\n/);
+  });
+
+  it("opens the API key modal from #settings without relying on HTML onclick attributes", () => {
+    expect(dashboardHtml).toContain('id="settings"');
+    expect(dashboardHtml).toContain('id="keyModal"');
+    expect(dashboardHtml).not.toContain("onclick=");
+    expect(dashboardJs).toContain("$('settings').onclick");
+    expect(dashboardJs).toContain("classList.remove('hidden')");
+  });
 });
