@@ -38,7 +38,16 @@ try {
   if (!health || health.status !== "ok" || health.storage !== "json") throw new Error("JSON health check failed");
 
   const dashboard = await fetch(`http://127.0.0.1:${port}/dashboard`);
-  if (!dashboard.ok || !(await dashboard.text()).includes("Панель лидов")) throw new Error("Dashboard smoke check failed");
+  const dashboardHtml = await dashboard.text();
+  if (!dashboard.ok || !dashboardHtml.includes("Панель лидов")) throw new Error("Dashboard smoke check failed");
+  const dashboardJs = await fetch(`http://127.0.0.1:${port}/dashboard.js`);
+  const dashboardScript = await dashboardJs.text();
+  if (!dashboardJs.ok) throw new Error("Dashboard JS smoke check failed");
+  try {
+    new Function(dashboardScript);
+  } catch (error) {
+    throw new Error(`dashboard.js is not parseable: ${error instanceof Error ? error.message : error}`);
+  }
 
   const statsResponse = await fetch(`http://127.0.0.1:${port}/api/stats`, { headers: { "x-api-key": apiKey } });
   const stats = await statsResponse.json();
