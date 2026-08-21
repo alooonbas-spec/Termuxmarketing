@@ -1,4 +1,4 @@
-export const dashboardAssetVersion = "4";
+export const dashboardAssetVersion = "5";
 
 // String.raw keeps regex escapes intact. A normal template literal turns
 // split(/\n---\n/) into a regex with real newlines, which browsers reject
@@ -101,7 +101,7 @@ async function publishComment(id) {
 async function load() {
   $("keyInput").value = key();
   if (!key()) {
-    $("status").textContent = "Вставьте ADMIN_API_KEY в поле сверху и нажмите Сохранить";
+    $("status").textContent = "Вставьте ключ в окно справа и нажмите API-ключ";
     $("keyInput").focus();
     return;
   }
@@ -213,9 +213,11 @@ header{display:flex;justify-content:space-between;align-items:flex-start;gap:16p
 .eyebrow{color:#52d6b5;letter-spacing:.14em;font-size:12px}
 h1{font-size:36px;margin:6px 0}
 h2{margin-top:0}
-.key-bar{display:flex;gap:8px;align-items:center;flex:1;min-width:min(100%,260px)}
-.key-bar label{color:#8ea4b3;white-space:nowrap;font-size:14px}
-.key-bar input{flex:1;min-width:0}
+.key-window{display:flex;gap:10px;align-items:stretch;flex:1;min-width:min(100%,280px)}
+.key-box{flex:1;min-width:0;background:#0d1a24;border:1px solid #203442;border-radius:14px;padding:10px 12px;display:grid;gap:6px}
+.key-box p{margin:0;color:#8ea4b3;font-size:12px}
+.key-box input{width:100%;flex-basis:auto}
+.key-window > button{align-self:stretch;font-weight:700;border-color:#52d6b5;white-space:nowrap;min-width:120px}
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
 .stats article,.toolbar,.table-wrap,.outreach article,.comments article{background:#0d1a24;border:1px solid #203442;border-radius:14px}
 .stats article{padding:20px}
@@ -249,8 +251,8 @@ code{font-size:12px;word-break:break-all}
 .outreach,.comments{grid-template-columns:1fr}
 .toolbar{flex-wrap:wrap}
 input{flex-basis:100%}
-.key-bar{flex-wrap:wrap}
-.key-bar input{flex-basis:100%}
+.key-window{flex-basis:100%;min-width:0}
+.key-box input{flex-basis:auto}
 main{padding:24px 12px}
 h1{font-size:28px}
 }`;
@@ -271,10 +273,12 @@ export const dashboardHtml = `<!doctype html>
 <p class="eyebrow">SOCIAL CONTACT COLLECTOR</p>
 <h1>Панель лидов</h1>
 </div>
-<form id="keyForm" class="key-bar">
-<label for="keyInput">API-ключ</label>
+<form id="keyForm" class="key-window">
+<div class="key-box">
+<p>Окно для ключа</p>
 <input id="keyInput" type="text" autocomplete="off" placeholder="Вставьте ADMIN_API_KEY">
-<button id="keySave" type="submit">Сохранить</button>
+</div>
+<button id="settings" type="submit">API-ключ</button>
 </form>
 </header>
 <section id="stats" class="stats">
@@ -339,7 +343,7 @@ export const dashboardHtml = `<!doctype html>
 <tbody id="rows"></tbody>
 </table>
 </section>
-<p id="status" class="status">Вставьте ADMIN_API_KEY в поле сверху и нажмите Сохранить</p>
+<p id="status" class="status">Вставьте ключ в окно справа и нажмите API-ключ</p>
 </main>
 <noscript><p class="status">Для панели нужен JavaScript.</p></noscript>
 <script>${dashboardJs}</script>

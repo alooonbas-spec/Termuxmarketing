@@ -29,6 +29,7 @@ describe("dashboard API", () => {
     expect(page.headers["cache-control"]).toBe("no-store");
     expect(page.body).toContain('id="keyInput"');
     expect(page.body).toContain('id="keyForm"');
+    expect(page.body).toContain(">API-ключ</button>");
     expect(page.body).not.toContain("keyModal");
     expect(page.body).toContain("<script>");
     expect(() => new Function(script.body)).not.toThrow();

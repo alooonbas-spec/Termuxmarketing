@@ -16,10 +16,12 @@ describe("dashboard assets", () => {
     expect(dashboardJs).not.toMatch(/split\(\/\n/);
   });
 
-  it("shows the API key field on the page without a hidden modal", () => {
+  it("shows a key window with the API-ключ button beside it", () => {
     expect(dashboardHtml).toContain('id="keyForm"');
     expect(dashboardHtml).toContain('id="keyInput"');
-    expect(dashboardHtml).toContain('id="keySave"');
+    expect(dashboardHtml).toContain('id="settings"');
+    expect(dashboardHtml).toContain(">API-ключ</button>");
+    expect(dashboardHtml).toContain("Окно для ключа");
     expect(dashboardHtml).not.toContain("keyModal");
     expect(dashboardHtml).not.toContain("ОЖИДАНИЕ ЗАПУСКА JS");
     expect(dashboardJs).toContain('$("keyForm").onsubmit');
