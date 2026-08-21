@@ -21,15 +21,16 @@ describe("dashboard API", () => {
     expect(response.json()).toMatchObject({ total: 0, withContacts: 0 });
   });
 
-  it("serves a cache-busted dashboard.js that browsers can parse", async () => {
+  it("embeds a parseable dashboard script and keeps a visible API key field", async () => {
     const app = await buildApp(repository, { adminApiKey: "1234567890123456" });
     apps.push(app);
     const page = await app.inject({ method: "GET", url: "/dashboard" });
     const script = await app.inject({ method: "GET", url: "/dashboard.js" });
     expect(page.headers["cache-control"]).toBe("no-store");
-    expect(script.headers["cache-control"]).toBe("no-store");
-    expect(script.headers["content-type"]).toMatch(/javascript/);
-    expect(page.body).toMatch(/\/dashboard\.js\?v=\d+/);
+    expect(page.body).toContain('id="keyInput"');
+    expect(page.body).toContain('id="keyForm"');
+    expect(page.body).not.toContain("keyModal");
+    expect(page.body).toContain("<script>");
     expect(() => new Function(script.body)).not.toThrow();
     expect(script.body).not.toMatch(/split\(\/\n/);
   });

@@ -1,153 +1,8 @@
-export const dashboardAssetVersion = "3";
+export const dashboardAssetVersion = "4";
 
-export const dashboardHtml = `<!doctype html>
-<html lang="ru">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Cache-Control" content="no-store">
-<title>Social Contact Collector</title>
-<link rel="stylesheet" href="/dashboard.css?v=${dashboardAssetVersion}">
-</head>
-<body>
-<main>
-<header>
-<div>
-<p class="eyebrow">SOCIAL CONTACT COLLECTOR</p>
-<h1>Панель лидов</h1>
-</div>
-<button id="settings" type="button">API-ключ</button>
-</header>
-<div id="keyModal" class="modal hidden">
-<div class="modal-box">
-<p>Введите ADMIN_API_KEY</p>
-<p class="muted">Termux: <code>bash termux/show-key-termux.sh</code></p>
-<input id="keyInput" type="text" autocomplete="off" placeholder="Ключ из .env">
-<div class="actions">
-<button id="keySave" type="button">Сохранить</button>
-<button id="keyCancel" type="button">Отмена</button>
-</div>
-</div>
-</div>
-<section id="stats" class="stats">
-<article><span>Всего</span><strong id="total">—</strong></article>
-<article><span>С контактами</span><strong id="contacted">—</strong></article>
-<article><span>Средний score</span><strong id="score">—</strong></article>
-<article><span>Платформ</span><strong id="platforms">—</strong></article>
-</section>
-<section class="outreach">
-<article>
-<h2>Новый шаблон</h2>
-<input id="templateName" placeholder="Название шаблона">
-<select id="templatePlatform">
-<option value="all">Все платформы</option>
-<option>telegram</option><option>vk</option><option>instagram</option><option>facebook</option>
-<option>x</option><option>linkedin</option><option>dzen</option><option>pinterest</option>
-<option>reddit</option><option>quora</option>
-</select>
-<textarea id="variants" placeholder="Вариант 1&#10;---&#10;Вариант 2&#10;&#10;Переменные: {{firstName}}, {{displayName}}, {{username}}, {{platform}}"></textarea>
-<button id="createTemplate" type="button">Сохранить шаблон</button>
-</article>
-<article>
-<h2>Новая кампания</h2>
-<input id="campaignName" placeholder="Название кампании">
-<select id="campaignTemplate"><option value="">Выберите шаблон</option></select>
-<input id="campaignPlatforms" placeholder="Платформы через запятую: telegram,vk">
-<input id="minimumScore" type="number" min="0" max="100" value="0" placeholder="Минимальный score">
-<input id="scheduledAt" type="datetime-local">
-<button id="createCampaign" type="button">Создать и запустить</button>
-<p class="muted">Отправка только по подтверждённым контактам или существующим диалогам.</p>
-</article>
-</section>
-<section class="comments">
-<article>
-<div>
-<p class="eyebrow">КОММЕНТАРИИ</p>
-<h2>Новый комментарий VK</h2>
-</div>
-<select id="commentAccount"><option value="">Нет настроенных аккаунтов</option></select>
-<input id="commentUrl" placeholder="https://vk.com/wall-123_456">
-<textarea id="commentText" maxlength="4096" placeholder="Текст комментария"></textarea>
-<div class="actions">
-<button id="createDraft" type="button">Создать черновик</button>
-<span id="commentCounter" class="muted">0 / 4096</span>
-</div>
-<p class="muted">Сначала создаётся черновик. Публикация выполняется только отдельной кнопкой подтверждения.</p>
-</article>
-<article>
-<h2>Журнал комментариев</h2>
-<div class="comment-list" id="commentRows"><p class="muted">Комментариев пока нет</p></div>
-</article>
-</section>
-<section class="toolbar">
-<input id="search" placeholder="Поиск по имени, контакту или платформе">
-<select id="platform"><option value="">Все платформы</option></select>
-<button id="reload" type="button">Обновить</button>
-<button id="csv" type="button">Скачать CSV</button>
-</section>
-<section class="table-wrap">
-<table>
-<thead><tr><th>Платформа</th><th>Лид</th><th>Контакты</th><th>Источник</th><th>Score</th><th>Дата</th></tr></thead>
-<tbody id="rows"></tbody>
-</table>
-</section>
-<p id="status" class="status"></p>
-</main>
-<noscript><p class="status">Для панели нужен JavaScript.</p></noscript>
-<script src="/dashboard.js?v=${dashboardAssetVersion}" defer></script>
-</body>
-</html>`;
-
-export const dashboardCss = `:root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui;background:#081018;color:#eaf1f7}
-*{box-sizing:border-box}
-body{margin:0;background:radial-gradient(circle at 20% 0,#14364a 0,transparent 35%),#081018}
-main{max-width:1280px;margin:auto;padding:40px 24px}
-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px}
-.eyebrow{color:#52d6b5;letter-spacing:.14em;font-size:12px}
-h1{font-size:36px;margin:6px 0}
-h2{margin-top:0}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
-.stats article,.toolbar,.table-wrap,.outreach article,.comments article{background:#0d1a24;border:1px solid #203442;border-radius:14px}
-.stats article{padding:20px}
-.stats span{display:block;color:#8ea4b3;font-size:13px}
-.stats strong{display:block;font-size:30px;margin-top:8px}
-.outreach,.comments{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
-.outreach article,.comments article{padding:18px;display:grid;gap:10px}
-.toolbar,.actions{display:flex;gap:10px;padding:14px;margin-bottom:20px}
-.actions{padding:0;margin:0;align-items:center;justify-content:space-between}
-input,select,textarea,button{border:1px solid #294250;background:#10232f;color:#edf7fa;border-radius:9px;padding:11px 13px}
-textarea{min-height:120px;resize:vertical}
-input{flex:1}
-button{cursor:pointer}
-button:hover{border-color:#52d6b5}
-.danger{border-color:#8d4d51;background:#3b1e24}
-.comment-list{max-height:420px;overflow:auto;display:grid;gap:9px}
-.comment-item{border:1px solid #203442;border-radius:10px;padding:12px;display:grid;gap:7px}
-.comment-head{display:flex;justify-content:space-between;gap:8px}
-.comment-text{white-space:pre-wrap;overflow-wrap:anywhere}
-.table-wrap{overflow:auto}
-table{width:100%;border-collapse:collapse}
-th,td{text-align:left;padding:14px;border-bottom:1px solid #1d303d;font-size:14px}
-th{color:#8ea4b3}
-.badge{display:inline-block;padding:4px 8px;border-radius:99px;background:#183847;color:#7de2ca}
-.score{font-weight:700;color:#52d6b5}
-.muted,.status{color:#8ea4b3}
-.status{min-height:24px}
-code{font-size:12px;word-break:break-all}
-.modal{position:fixed;inset:0;background:rgba(4,10,16,.85);display:flex;align-items:center;justify-content:center;padding:20px;z-index:2000}
-.modal.hidden{display:none!important}
-.modal-box{background:#0d1a24;border:1px solid #203442;border-radius:14px;padding:20px;display:grid;gap:12px;width:100%;max-width:360px}
-.modal-box .actions{padding:0;margin:0}
-@media(max-width:800px){
-.stats{grid-template-columns:repeat(2,1fr)}
-.outreach,.comments{grid-template-columns:1fr}
-.toolbar{flex-wrap:wrap}
-input{flex-basis:100%}
-main{padding:24px 12px}
-}`;
-
-// String.raw keeps \\n sequences intact. A normal template literal turns split(/\n---\n/)
-// into a regex with real newlines, which browsers reject before any click handler runs.
+// String.raw keeps regex escapes intact. A normal template literal turns
+// split(/\n---\n/) into a regex with real newlines, which browsers reject
+// before any click handler runs.
 export const dashboardJs = String.raw`"use strict";
 const $ = (id) => document.getElementById(id);
 const key = () => localStorage.getItem("collectorApiKey") || "";
@@ -160,16 +15,6 @@ const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({
 }[c]));
 let leads = [];
 let commentHistory = [];
-
-function openKeyModal() {
-  $("keyInput").value = key();
-  $("keyModal").classList.remove("hidden");
-  $("keyInput").focus();
-}
-
-function closeKeyModal() {
-  $("keyModal").classList.add("hidden");
-}
 
 async function api(path) {
   const r = await fetch(path, { headers: { "x-api-key": key() } });
@@ -254,9 +99,10 @@ async function publishComment(id) {
 }
 
 async function load() {
+  $("keyInput").value = key();
   if (!key()) {
-    $("status").textContent = "Введите ADMIN_API_KEY, чтобы открыть панель";
-    openKeyModal();
+    $("status").textContent = "Вставьте ADMIN_API_KEY в поле сверху и нажмите Сохранить";
+    $("keyInput").focus();
     return;
   }
   try {
@@ -282,20 +128,14 @@ async function load() {
     $("status").textContent = "Обновлено: " + new Date().toLocaleTimeString("ru-RU");
   } catch (e) {
     $("status").textContent = e.message;
-    if (e.message === "Укажите правильный API-ключ") openKeyModal();
+    $("keyInput").focus();
   }
 }
 
-$("settings").onclick = openKeyModal;
-$("keyCancel").onclick = closeKeyModal;
-$("keySave").onclick = () => {
+$("keyForm").onsubmit = (e) => {
+  e.preventDefault();
   localStorage.setItem("collectorApiKey", $("keyInput").value.trim());
-  closeKeyModal();
   load();
-};
-$("keyInput").onkeydown = (e) => {
-  if (e.key === "Enter") $("keySave").click();
-  if (e.key === "Escape") $("keyCancel").click();
 };
 $("reload").onclick = load;
 $("search").oninput = render;
@@ -322,7 +162,7 @@ $("createDraft").onclick = async () => {
 };
 $("createTemplate").onclick = async () => {
   try {
-    const variants = $("variants").value.split(/\n---\n/).map((x) => x.trim()).filter(Boolean);
+    const variants = $("variants").value.split("---").map((x) => x.trim()).filter(Boolean);
     await send("/api/outreach/templates", {
       name: $("templateName").value,
       platform: $("templatePlatform").value,
@@ -364,3 +204,144 @@ $("csv").onclick = async () => {
 };
 load();
 `;
+
+export const dashboardCss = `:root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui;background:#081018;color:#eaf1f7}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(circle at 20% 0,#14364a 0,transparent 35%),#081018}
+main{max-width:1280px;margin:auto;padding:40px 24px}
+header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:28px}
+.eyebrow{color:#52d6b5;letter-spacing:.14em;font-size:12px}
+h1{font-size:36px;margin:6px 0}
+h2{margin-top:0}
+.key-bar{display:flex;gap:8px;align-items:center;flex:1;min-width:min(100%,260px)}
+.key-bar label{color:#8ea4b3;white-space:nowrap;font-size:14px}
+.key-bar input{flex:1;min-width:0}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.stats article,.toolbar,.table-wrap,.outreach article,.comments article{background:#0d1a24;border:1px solid #203442;border-radius:14px}
+.stats article{padding:20px}
+.stats span{display:block;color:#8ea4b3;font-size:13px}
+.stats strong{display:block;font-size:30px;margin-top:8px}
+.outreach,.comments{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+.outreach article,.comments article{padding:18px;display:grid;gap:10px}
+.toolbar,.actions{display:flex;gap:10px;padding:14px;margin-bottom:20px}
+.actions{padding:0;margin:0;align-items:center;justify-content:space-between}
+input,select,textarea,button{border:1px solid #294250;background:#10232f;color:#edf7fa;border-radius:9px;padding:11px 13px}
+textarea{min-height:120px;resize:vertical}
+input{flex:1}
+button{cursor:pointer}
+button:hover{border-color:#52d6b5}
+.danger{border-color:#8d4d51;background:#3b1e24}
+.comment-list{max-height:420px;overflow:auto;display:grid;gap:9px}
+.comment-item{border:1px solid #203442;border-radius:10px;padding:12px;display:grid;gap:7px}
+.comment-head{display:flex;justify-content:space-between;gap:8px}
+.comment-text{white-space:pre-wrap;overflow-wrap:anywhere}
+.table-wrap{overflow:auto}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:14px;border-bottom:1px solid #1d303d;font-size:14px}
+th{color:#8ea4b3}
+.badge{display:inline-block;padding:4px 8px;border-radius:99px;background:#183847;color:#7de2ca}
+.score{font-weight:700;color:#52d6b5}
+.muted,.status{color:#8ea4b3}
+.status{min-height:24px}
+code{font-size:12px;word-break:break-all}
+@media(max-width:800px){
+.stats{grid-template-columns:repeat(2,1fr)}
+.outreach,.comments{grid-template-columns:1fr}
+.toolbar{flex-wrap:wrap}
+input{flex-basis:100%}
+.key-bar{flex-wrap:wrap}
+.key-bar input{flex-basis:100%}
+main{padding:24px 12px}
+h1{font-size:28px}
+}`;
+
+export const dashboardHtml = `<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-store">
+<title>Social Contact Collector</title>
+<link rel="stylesheet" href="/dashboard.css?v=${dashboardAssetVersion}">
+</head>
+<body>
+<main>
+<header>
+<div>
+<p class="eyebrow">SOCIAL CONTACT COLLECTOR</p>
+<h1>Панель лидов</h1>
+</div>
+<form id="keyForm" class="key-bar">
+<label for="keyInput">API-ключ</label>
+<input id="keyInput" type="text" autocomplete="off" placeholder="Вставьте ADMIN_API_KEY">
+<button id="keySave" type="submit">Сохранить</button>
+</form>
+</header>
+<section id="stats" class="stats">
+<article><span>Всего</span><strong id="total">—</strong></article>
+<article><span>С контактами</span><strong id="contacted">—</strong></article>
+<article><span>Средний score</span><strong id="score">—</strong></article>
+<article><span>Платформ</span><strong id="platforms">—</strong></article>
+</section>
+<section class="outreach">
+<article>
+<h2>Новый шаблон</h2>
+<input id="templateName" placeholder="Название шаблона">
+<select id="templatePlatform">
+<option value="all">Все платформы</option>
+<option>telegram</option><option>vk</option><option>instagram</option><option>facebook</option>
+<option>x</option><option>linkedin</option><option>dzen</option><option>pinterest</option>
+<option>reddit</option><option>quora</option>
+</select>
+<textarea id="variants" placeholder="Вариант 1&#10;---&#10;Вариант 2&#10;&#10;Переменные: {{firstName}}, {{displayName}}, {{username}}, {{platform}}"></textarea>
+<button id="createTemplate" type="button">Сохранить шаблон</button>
+</article>
+<article>
+<h2>Новая кампания</h2>
+<input id="campaignName" placeholder="Название кампании">
+<select id="campaignTemplate"><option value="">Выберите шаблон</option></select>
+<input id="campaignPlatforms" placeholder="Платформы через запятую: telegram,vk">
+<input id="minimumScore" type="number" min="0" max="100" value="0" placeholder="Минимальный score">
+<input id="scheduledAt" type="datetime-local">
+<button id="createCampaign" type="button">Создать и запустить</button>
+<p class="muted">Отправка только по подтверждённым контактам или существующим диалогам.</p>
+</article>
+</section>
+<section class="comments">
+<article>
+<div>
+<p class="eyebrow">КОММЕНТАРИИ</p>
+<h2>Новый комментарий VK</h2>
+</div>
+<select id="commentAccount"><option value="">Нет настроенных аккаунтов</option></select>
+<input id="commentUrl" placeholder="https://vk.com/wall-123_456">
+<textarea id="commentText" maxlength="4096" placeholder="Текст комментария"></textarea>
+<div class="actions">
+<button id="createDraft" type="button">Создать черновик</button>
+<span id="commentCounter" class="muted">0 / 4096</span>
+</div>
+<p class="muted">Сначала создаётся черновик. Публикация выполняется только отдельной кнопкой подтверждения.</p>
+</article>
+<article>
+<h2>Журнал комментариев</h2>
+<div class="comment-list" id="commentRows"><p class="muted">Комментариев пока нет</p></div>
+</article>
+</section>
+<section class="toolbar">
+<input id="search" placeholder="Поиск по имени, контакту или платформе">
+<select id="platform"><option value="">Все платформы</option></select>
+<button id="reload" type="button">Обновить</button>
+<button id="csv" type="button">Скачать CSV</button>
+</section>
+<section class="table-wrap">
+<table>
+<thead><tr><th>Платформа</th><th>Лид</th><th>Контакты</th><th>Источник</th><th>Score</th><th>Дата</th></tr></thead>
+<tbody id="rows"></tbody>
+</table>
+</section>
+<p id="status" class="status">Вставьте ADMIN_API_KEY в поле сверху и нажмите Сохранить</p>
+</main>
+<noscript><p class="status">Для панели нужен JavaScript.</p></noscript>
+<script>${dashboardJs}</script>
+</body>
+</html>`;

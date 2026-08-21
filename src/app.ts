@@ -32,11 +32,12 @@ export async function buildApp(repository: LeadRepository, config: AppConfig, ou
   await app.register(helmet, {
     contentSecurityPolicy: {
       directives: {
-        // Панель /dashboard работает по обычному HTTP (127.0.0.1), и без явного
-        // отключения этой директивы браузер молча апгрейдит запрос к /dashboard.js
-        // на https:// — TLS-слушателя на этом порту нет, скрипт не загружается,
-        // и страница выглядит так, будто JS вообще не запускается.
+        // Панель /dashboard работает по обычному HTTP (127.0.0.1). Без отключения
+        // этой директивы браузер апгрейдит скрипты на https://, а слушателя TLS нет.
         "upgrade-insecure-requests": null,
+        // Скрипт панели встроен в HTML, чтобы Android не терял /dashboard.js
+        // из‑за кэша или принудительного HTTPS.
+        "script-src": ["'self'", "'unsafe-inline'"],
       },
     },
   });
